@@ -1,30 +1,16 @@
-#[macro_use]
-extern crate serde_json;
-extern crate json_patch;
-
-use json_patch::patch;
-use serde_json::from_str;
+use jdiff::patchy;
+use std::env;
 
 fn main() {
-    let mut doc = json!([
-        { "name": "Andrew" },
-        { "name": "Maxim" }
-    ]);
+    let args: Vec<String> = env::args().collect();
+    println!("{:?}", args);
 
-    let p = from_str(
-        r#"[
-  { "op": "test", "path": "/0/name", "value": "Andrew" },
-  { "op": "add", "path": "/0/happy", "value": true }
-]"#,
-    )
-    .unwrap();
+    // [0] is the command name
+    let before = &args[1]; // previous version
+    let after = &args[2]; // current version
+    let patches = &args[3]; // patches file
 
-    patch(&mut doc, &p).unwrap();
-    assert_eq!(
-        doc,
-        json!([
-          { "name": "Andrew", "happy": true },
-          { "name": "Maxim" }
-        ])
-    );
+    if let Err(e) = patchy(before, after, patches) {
+        eprintln!("{}", e);
+    }
 }

@@ -1,0 +1,22 @@
+{
+    "url": "./repodata.json",
+    "latest": "57328314411096222b90",
+    "patches": [
+      {
+        "to": "57328314411096222b90",
+        "from": "4ae4acf2f802f6f5210f",
+        "patch": [
+          {
+            "op": "add",
+            "path": "/spam",
+            "value": "eggs"
+          }
+        ]
+      },
+      {
+        "to": "4ae4acf2f802f6f5210f",
+        "from": "",
+        "patch": null
+      }
+    ]
+  }
