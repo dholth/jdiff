@@ -13,18 +13,18 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::io::SeekFrom;
 
-use json_patch::diff;
+use json_patch::{diff, patch};
 
 use serde_json::Value;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Patch {
     to: String,
     from: String,
     patch: Option<json_patch::Patch>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct PatchSet {
     url: String,
     latest: String,
@@ -37,16 +37,13 @@ pub fn hash(path: &str) -> Result<String, Box<dyn Error>> {
 
     let mut file = fs::File::open(&path)?;
     let mut hasher = Blake2b::<consts::U32>::new();
-    let n = io::copy(&mut file, &mut hasher)?;
+    io::copy(&mut file, &mut hasher)?;
     let hash = hasher.finalize();
-
-    println!("Path: {}", path);
-    println!("Bytes processed: {}", n);
-    println!("Hash value: {:x}", hash);
 
     Ok(format!("{:x}", hash))
 }
 
+// create new patch and insert into patches
 pub fn patchy(left: &str, right: &str, patches: &str) -> Result<i32, Box<dyn Error>> {
     let f_left = File::open(left)?;
     let f_right = File::open(right)?;
@@ -62,41 +59,62 @@ pub fn patchy(left: &str, right: &str, patches: &str) -> Result<i32, Box<dyn Err
     let patch = diff(&ldata, &rdata);
 
     lreader.seek(SeekFrom::Start(0)).expect("could not seek");
-    // now compute a
 
-    println!("{:#?}", ldata);
-    println!("{:#?}", rdata);
-    // println!("{:?}", patch);
-    println!("{}", serde_json::to_string_pretty(&patch)?);
+    eprintln!("{:#?}", ldata);
+    eprintln!("{:#?}", rdata);
+    eprintln!("{}", serde_json::to_string_pretty(&patch)?);
 
-    hash(left)?;
-    hash(right)?;
-    hash(patches)?;
+    let hash_left = hash(left)?;
+    let hash_right = hash(right)?;
 
-    // let pset = PatchSet {
-    //     url: "./repodata.json".to_owned(),
-    //     latest: hash(right)?.to_owned(),
-    //     patches: vec![
-    //         Patch {
-    //             from: hash(left)?,
-    //             to: hash(right)?,
-    //             patch: Some(patch),
-    //         },
-    //         Patch {
-    //             from: "".to_owned(),
-    //             to: hash(left)?,
-    //             patch: None,
-    //         },
-    //     ],
-    // };
+    // skip insert if pset.latest already equals pset.patches[0].to
+    if hash_right == pset.latest {
+        eprintln!("Nothing to do");
+    } else {
+        pset.patches.insert(
+            0,
+            Patch {
+                from: hash_left,
+                to: hash_right,
+                patch: Some(patch),
+            },
+        );
+        pset.latest = pset.patches[0].to.clone();
+    }
 
-    pset.patches.push(Patch {
-        from: hash(left)?,
-        to: hash(right)?,
-        patch: Some(patch),
-    });
+    println!("{}", serde_json::to_string(&pset)?);
 
-    println!("{}", serde_json::to_string_pretty(&pset)?);
+    Ok(0)
+}
+
+// bring left to latest by applying patches
+pub fn apply(left: &str, patches: &str) -> Result<i32, Box<dyn Error>> {
+    let f_left = File::open(left)?;
+    let f_patches = File::open(patches)?;
+    let mut lreader = BufReader::new(f_left);
+    let mut preader = BufReader::new(f_patches);
+
+    let mut ldata: Value = serde_json::from_reader(&mut lreader)?;
+    let pset: PatchSet = serde_json::from_reader(&mut preader)?;
+
+    lreader.seek(SeekFrom::Start(0)).expect("could not seek");
+    let hash_left = hash(left)?;
+
+    if hash_left == pset.latest {
+        eprintln!("Nothing to do");
+        return Ok(0);
+    }
+
+    for p in pset.patches {
+        println!("{:?}", &p);
+        let pp = match p.patch {
+            Some(pp) => pp,
+            None => continue,
+        };
+        patch(&mut ldata, &pp)?;
+    }
+
+    println!("{}", serde_json::to_string_pretty(&ldata)?);
 
     Ok(0)
 }
