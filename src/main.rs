@@ -29,7 +29,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Patch {},
+    Patch {
+        #[clap(long)]
+        hash_imputed: Option<String>
+    },
 }
 
 fn main() {
@@ -40,13 +43,14 @@ fn main() {
     let patches = cli.patchset; // patches file
 
     match &cli.command {
-        Some(Commands::Patch {}) => {
+        Some(Commands::Patch { hash_imputed }) => {
             if let Err(e) = apply(
                 before.as_path(),
                 after.as_path(),
                 patches.as_path(),
                 cli.indent,
                 cli.overwrite,
+                hash_imputed.to_owned()
             ) {
                 eprintln!("{}", e);
             }

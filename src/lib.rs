@@ -47,7 +47,7 @@ pub fn hash(path: &Path) -> Result<String, Box<dyn Error>> {
 
 // create new patch containing differences between left and right, and insert into patches
 // if overwrite, write to patches, else stdout
-// needs 'imputed' left hash value when patching a patched file
+// needs 'imputed' left hash value when patching a patched file: hash_from
 pub fn patchy(
     left: &Path,
     right: &Path,
@@ -72,6 +72,7 @@ pub fn patchy(
 
     lreader.seek(SeekFrom::Start(0)).expect("could not seek");
 
+    // when patching a patched file you must keep track of what its hash "should" be
     let hash_left = hash(left)?;
     let hash_right = hash(right)?;
 
@@ -117,6 +118,7 @@ pub fn apply(
     patches: &Path,
     indent: bool,
     overwrite: bool,
+    hash_left_imputed: Option<String>,
 ) -> Result<i32, Box<dyn Error>> {
     let f_left = File::open(left)?;
     let f_patches = File::open(patches)?;
@@ -127,7 +129,12 @@ pub fn apply(
     let pset: PatchSet = serde_json::from_reader(&mut preader)?;
 
     lreader.seek(SeekFrom::Start(0)).expect("could not seek");
-    let hash_left = hash(left)?;
+
+    // when patching a patched file you must keep track of what its hash "should" be
+    let hash_left = match hash_left_imputed {
+        Some(hash_value) => hash_value,
+        None => hash(left)?,
+    };
 
     if hash_left == pset.latest {
         eprintln!("Nothing to do");
