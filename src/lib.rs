@@ -10,8 +10,8 @@ use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::io::BufReader;
 use std::io::SeekFrom;
+use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
 use json_patch::{diff, patch};
@@ -91,11 +91,11 @@ pub fn patchy(
 
     if overwrite {
         // write to "right hand" file
-        let writer = File::create(patches)?;
+        let writer = BufWriter::new(File::create(patches)?);
         if indent {
-            serde_json::to_writer_pretty(&writer, &pset)?;
+            serde_json::to_writer_pretty(writer, &pset)?;
         } else {
-            serde_json::to_writer(&writer, &pset)?;
+            serde_json::to_writer(writer, &pset)?;
         }
     } else {
         if indent {
@@ -178,11 +178,11 @@ pub fn apply(
 
     if overwrite {
         // write to "right hand" file
-        let writer = File::create(right)?;
+        let writer = BufWriter::new(File::create(right)?);
         if indent {
-            serde_json::to_writer_pretty(&writer, &ldata)?;
+            serde_json::to_writer_pretty(writer, &ldata)?;
         } else {
-            serde_json::to_writer(&writer, &ldata)?;
+            serde_json::to_writer(writer, &ldata)?;
         }
     } else {
         if indent {
