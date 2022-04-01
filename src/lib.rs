@@ -51,6 +51,7 @@ pub fn patchy(
     right: &Path,
     patches: &Path,
     indent: bool,
+    overwrite: bool,
 ) -> Result<i32, Box<dyn Error>> {
     let f_left = File::open(left)?;
     let f_right = File::open(right)?;
@@ -62,6 +63,8 @@ pub fn patchy(
     let ldata: Value = serde_json::from_reader(&mut lreader)?;
     let rdata: Value = serde_json::from_reader(&mut rreader)?;
     let mut pset: PatchSet = serde_json::from_reader(&mut preader)?;
+
+    drop(preader); // close it now for possible overwrite
 
     let patch = diff(&ldata, &rdata);
 
@@ -89,17 +92,33 @@ pub fn patchy(
         pset.latest = pset.patches[0].to.clone();
     }
 
-    if indent {
-        println!("{}", serde_json::to_string_pretty(&pset)?);
+    if overwrite {
+        // write to "right hand" file
+        let writer = File::create(patches)?;
+        if indent {
+            serde_json::to_writer_pretty(&writer, &pset)?;
+        } else {
+            serde_json::to_writer(&writer, &pset)?;
+        }
     } else {
-        println!("{}", serde_json::to_string(&pset)?);
+        if indent {
+            println!("{}", serde_json::to_string_pretty(&pset)?);
+        } else {
+            println!("{}", serde_json::to_string(&pset)?);
+        }
     }
 
     Ok(0)
 }
 
 // bring left to latest by applying patches, write to right
-pub fn apply(left: &Path, patches: &Path, indent: bool) -> Result<i32, Box<dyn Error>> {
+pub fn apply(
+    left: &Path,
+    right: &Path,
+    patches: &Path,
+    indent: bool,
+    overwrite: bool,
+) -> Result<i32, Box<dyn Error>> {
     let f_left = File::open(left)?;
     let f_patches = File::open(patches)?;
     let mut lreader = BufReader::new(f_left);
@@ -123,13 +142,14 @@ pub fn apply(left: &Path, patches: &Path, indent: bool) -> Result<i32, Box<dyn E
         .into_iter()
         .filter(|p| {
             match &mut target {
+                // does this patch bring us closer to pset.latest?
                 Some(target_hash) => {
                     if target_hash != &p.to {
                         return false;
                     }
-                    if target_hash == &p.from {
-                        // we found it
-                        target = None // skip rest of array
+                    if hash_left == p.from {
+                        // we found it, include this patch
+                        target = None; // skip rest of array
                     } else {
                         // look for next patch in the chain
                         target = Some(p.from.to_string());
@@ -141,6 +161,13 @@ pub fn apply(left: &Path, patches: &Path, indent: bool) -> Result<i32, Box<dyn E
         })
         .collect::<Vec<Patch>>();
 
+    let found_left = match target {
+        Some(_) => false,
+        None => true,
+    };
+
+    eprintln!("Did we find starting document in patches? {}", found_left);
+
     // apply in reverse order
     for p in to_apply.iter().rev() {
         println!("{:?}", &p);
@@ -151,10 +178,20 @@ pub fn apply(left: &Path, patches: &Path, indent: bool) -> Result<i32, Box<dyn E
         patch(&mut ldata, &q)?;
     }
 
-    if indent {
-        println!("{}", serde_json::to_string_pretty(&ldata)?);
+    if overwrite {
+        // write to "right hand" file
+        let writer = File::create(right)?;
+        if indent {
+            serde_json::to_writer_pretty(&writer, &ldata)?;
+        } else {
+            serde_json::to_writer(&writer, &ldata)?;
+        }
     } else {
-        println!("{}", serde_json::to_string(&ldata)?);
+        if indent {
+            println!("{}", serde_json::to_string_pretty(&ldata)?);
+        } else {
+            println!("{}", serde_json::to_string(&ldata)?);
+        }
     }
 
     Ok(0)

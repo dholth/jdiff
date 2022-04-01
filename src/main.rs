@@ -1,4 +1,4 @@
-use jdiff::{apply, patchy};
+use jpatchset::{apply, patchy};
 
 use std::path::PathBuf;
 
@@ -20,6 +20,9 @@ struct Cli {
     #[clap(short, long)]
     indent: bool,
 
+    #[clap(short, long)]
+    overwrite: bool,
+
     #[clap(subcommand)]
     command: Option<Commands>,
 }
@@ -38,7 +41,13 @@ fn main() {
 
     match &cli.command {
         Some(Commands::Patch {}) => {
-            if let Err(e) = apply(after.as_path(), patches.as_path(), cli.indent) {
+            if let Err(e) = apply(
+                before.as_path(),
+                after.as_path(),
+                patches.as_path(),
+                cli.indent,
+                cli.overwrite,
+            ) {
                 eprintln!("{}", e);
             }
         }
@@ -48,6 +57,7 @@ fn main() {
                 after.as_path(),
                 patches.as_path(),
                 cli.indent,
+                cli.overwrite,
             ) {
                 eprintln!("{}", e);
             }
