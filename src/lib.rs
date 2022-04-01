@@ -12,6 +12,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::io::SeekFrom;
+use std::path::Path;
 
 use json_patch::{diff, patch};
 
@@ -31,7 +32,8 @@ struct PatchSet {
     patches: Vec<Patch>,
 }
 
-pub fn hash(path: &str) -> Result<String, Box<dyn Error>> {
+// compute BLAKE2(256) hash of file at path
+pub fn hash(path: &Path) -> Result<String, Box<dyn Error>> {
     use blake2::{digest::consts, Blake2b, Digest};
 
     let mut file = fs::File::open(&path)?;
@@ -43,8 +45,13 @@ pub fn hash(path: &str) -> Result<String, Box<dyn Error>> {
     Ok(format!("{:x}", hash))
 }
 
-// create new patch and insert into patches
-pub fn patchy(left: &str, right: &str, patches: &str) -> Result<i32, Box<dyn Error>> {
+// create new patch containing differences between left and right, and insert into patches
+pub fn patchy(
+    left: &Path,
+    right: &Path,
+    patches: &Path,
+    indent: bool,
+) -> Result<i32, Box<dyn Error>> {
     let f_left = File::open(left)?;
     let f_right = File::open(right)?;
     let f_patches = File::open(patches)?;
@@ -82,13 +89,17 @@ pub fn patchy(left: &str, right: &str, patches: &str) -> Result<i32, Box<dyn Err
         pset.latest = pset.patches[0].to.clone();
     }
 
-    println!("{}", serde_json::to_string(&pset)?);
+    if indent {
+        println!("{}", serde_json::to_string_pretty(&pset)?);
+    } else {
+        println!("{}", serde_json::to_string(&pset)?);
+    }
 
     Ok(0)
 }
 
-// bring left to latest by applying patches
-pub fn apply(left: &str, patches: &str) -> Result<i32, Box<dyn Error>> {
+// bring left to latest by applying patches, write to right
+pub fn apply(left: &Path, patches: &Path, indent: bool) -> Result<i32, Box<dyn Error>> {
     let f_left = File::open(left)?;
     let f_patches = File::open(patches)?;
     let mut lreader = BufReader::new(f_left);
@@ -105,16 +116,46 @@ pub fn apply(left: &str, patches: &str) -> Result<i32, Box<dyn Error>> {
         return Ok(0);
     }
 
-    for p in pset.patches {
+    // follow chain of patches from latest to the version we currently have
+    let mut target = Some(pset.latest);
+    let to_apply = pset
+        .patches
+        .into_iter()
+        .filter(|p| {
+            match &mut target {
+                Some(target_hash) => {
+                    if target_hash != &p.to {
+                        return false;
+                    }
+                    if target_hash == &p.from {
+                        // we found it
+                        target = None // skip rest of array
+                    } else {
+                        // look for next patch in the chain
+                        target = Some(p.from.to_string());
+                    }
+                    true
+                }
+                None => false,
+            }
+        })
+        .collect::<Vec<Patch>>();
+
+    // apply in reverse order
+    for p in to_apply.iter().rev() {
         println!("{:?}", &p);
-        let pp = match p.patch {
-            Some(pp) => pp,
+        let q = match p.patch {
+            Some(ref q) => q,
             None => continue,
         };
-        patch(&mut ldata, &pp)?;
+        patch(&mut ldata, &q)?;
     }
 
-    println!("{}", serde_json::to_string_pretty(&ldata)?);
+    if indent {
+        println!("{}", serde_json::to_string_pretty(&ldata)?);
+    } else {
+        println!("{}", serde_json::to_string(&ldata)?);
+    }
 
     Ok(0)
 }
