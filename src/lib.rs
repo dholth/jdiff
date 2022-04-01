@@ -46,6 +46,7 @@ pub fn hash(path: &Path) -> Result<String, Box<dyn Error>> {
 }
 
 // create new patch containing differences between left and right, and insert into patches
+// if overwrite, write to patches, else stdout
 pub fn patchy(
     left: &Path,
     right: &Path,
@@ -69,10 +70,6 @@ pub fn patchy(
     let patch = diff(&ldata, &rdata);
 
     lreader.seek(SeekFrom::Start(0)).expect("could not seek");
-
-    eprintln!("{:#?}", ldata);
-    eprintln!("{:#?}", rdata);
-    eprintln!("{}", serde_json::to_string_pretty(&patch)?);
 
     let hash_left = hash(left)?;
     let hash_right = hash(right)?;
@@ -111,7 +108,8 @@ pub fn patchy(
     Ok(0)
 }
 
-// bring left to latest by applying patches, write to right
+// bring left to latest by applying patches
+// if overwrite, write to right, else stdout
 pub fn apply(
     left: &Path,
     right: &Path,
@@ -170,7 +168,7 @@ pub fn apply(
 
     // apply in reverse order
     for p in to_apply.iter().rev() {
-        println!("{:?}", &p);
+        eprintln!("apply {} -> {}", &p.from, &p.to);
         let q = match p.patch {
             Some(ref q) => q,
             None => continue,
