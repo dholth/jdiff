@@ -32,10 +32,10 @@ struct PatchSet {
 }
 
 pub fn hash(path: &str) -> Result<String, Box<dyn Error>> {
-    // U constants are numbers of bytes
     use blake2::{digest::consts, Blake2b, Digest};
 
     let mut file = fs::File::open(&path)?;
+    // U constants are numbers of bytes
     let mut hasher = Blake2b::<consts::U32>::new();
     io::copy(&mut file, &mut hasher)?;
     let hash = hasher.finalize();
