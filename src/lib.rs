@@ -47,6 +47,7 @@ pub fn hash(path: &Path) -> Result<String, Box<dyn Error>> {
 
 // create new patch containing differences between left and right, and insert into patches
 // if overwrite, write to patches, else stdout
+// needs 'imputed' left hash value when patching a patched file
 pub fn patchy(
     left: &Path,
     right: &Path,
