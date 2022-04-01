@@ -2,6 +2,9 @@
 extern crate serde;
 extern crate json_patch;
 extern crate serde_json;
+extern crate simple_error;
+
+use simple_error::bail;
 
 use serde::Deserialize;
 
@@ -137,7 +140,7 @@ pub fn apply(
     };
 
     if hash_left == pset.latest {
-        eprintln!("Nothing to do");
+        eprintln!("file is up to date");
         return Ok(0);
     }
 
@@ -167,12 +170,9 @@ pub fn apply(
         })
         .collect::<Vec<Patch>>();
 
-    let found_left = match target {
-        Some(_) => false,
-        None => true,
+    if target.is_some() {
+        bail!("hash {} not found in patches", hash_left);
     };
-
-    eprintln!("Did we find starting document in patches? {}", found_left);
 
     // apply in reverse order
     for p in to_apply.iter().rev() {

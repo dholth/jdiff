@@ -1,6 +1,7 @@
 use jpatchset::{apply, patchy};
 
 use std::path::PathBuf;
+use std::process::exit;
 
 use clap::{Parser, Subcommand};
 
@@ -31,7 +32,7 @@ struct Cli {
 enum Commands {
     Patch {
         #[clap(long)]
-        hash_imputed: Option<String>
+        hash_imputed: Option<String>,
     },
 }
 
@@ -50,9 +51,10 @@ fn main() {
                 patches.as_path(),
                 cli.indent,
                 cli.overwrite,
-                hash_imputed.to_owned()
+                hash_imputed.to_owned(),
             ) {
                 eprintln!("{}", e);
+                exit(1);
             }
         }
         None => {
@@ -64,6 +66,7 @@ fn main() {
                 cli.overwrite,
             ) {
                 eprintln!("{}", e);
+                exit(1);
             }
         }
     }

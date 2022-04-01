@@ -15,3 +15,4 @@ serde_json = "*"
 serde = "*"
 blake2 = "*"
 clap = { version = "*", features = ["derive"] }
+simple-error = "*"
