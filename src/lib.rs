@@ -4,18 +4,17 @@ extern crate json_patch;
 extern crate serde_json;
 extern crate simple_error;
 
-use simple_error::bail;
+use simple_error::{bail, try_with};
 
 use serde::Deserialize;
 
 use std::error::Error;
-use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::prelude::*;
-use std::io::SeekFrom;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
+
+use niffler;
 
 use json_patch::{diff, patch};
 
@@ -39,7 +38,7 @@ struct PatchSet {
 pub fn hash(path: &Path) -> Result<String, Box<dyn Error>> {
     use blake2::{digest::consts, Blake2b, Digest};
 
-    let mut file = fs::File::open(&path)?;
+    let (mut file, _format) = niffler::from_path(path)?;
     // U constants are numbers of bytes
     let mut hasher = Blake2b::<consts::U32>::new();
     io::copy(&mut file, &mut hasher)?;
@@ -58,28 +57,38 @@ pub fn patchy(
     indent: bool,
     overwrite: bool,
 ) -> Result<i32, Box<dyn Error>> {
-    let f_left = File::open(left)?;
-    let f_right = File::open(right)?;
     let f_patches = File::open(patches)?;
-    let mut lreader = BufReader::new(f_left);
-    let mut rreader = BufReader::new(f_right);
+
+    // transparently support compressed json
+    let (mut lreader, _lformat) = niffler::from_path(left)?;
+    let (mut rreader, _rformat) = niffler::from_path(right)?;
+
     let mut preader = BufReader::new(f_patches);
 
-    let ldata: Value = serde_json::from_reader(&mut lreader)?;
-    let rdata: Value = serde_json::from_reader(&mut rreader)?;
-    let mut pset: PatchSet = serde_json::from_reader(&mut preader)?;
+    // TODO show filename on error
+    let ldata: Value = try_with!(
+        serde_json::from_reader(&mut lreader),
+        format!("Error parsing {}", left.to_string_lossy())
+    );
+    let rdata: Value = try_with!(
+        serde_json::from_reader(&mut rreader),
+        format!("Error parsing {}", right.to_string_lossy())
+    );
+    let mut pset: PatchSet = try_with!(
+        serde_json::from_reader(&mut preader),
+        format!("Error parsing {}", patches.to_string_lossy())
+    );
 
     drop(preader); // close it now for possible overwrite
 
     let patch = diff(&ldata, &rdata);
-
-    lreader.seek(SeekFrom::Start(0)).expect("could not seek");
 
     // when patching a patched file you must keep track of what its hash "should" be
     let hash_left = hash(left)?;
     let hash_right = hash(right)?;
 
     // skip insert if pset.latest already equals pset.patches[0].to
+    // also if hash_left == hash_right?
     if hash_right == pset.latest {
         eprintln!("Nothing to do");
     } else {
@@ -123,15 +132,23 @@ pub fn apply(
     overwrite: bool,
     hash_left_imputed: Option<String>,
 ) -> Result<i32, Box<dyn Error>> {
-    let f_left = File::open(left)?;
     let f_patches = File::open(patches)?;
-    let mut lreader = BufReader::new(f_left);
+
+    // transparently support compressed json
+    let (mut lreader, _lformat) = niffler::from_path(left)?;
+
     let mut preader = BufReader::new(f_patches);
 
-    let mut ldata: Value = serde_json::from_reader(&mut lreader)?;
-    let pset: PatchSet = serde_json::from_reader(&mut preader)?;
+    // TODO show filename on error
+    let mut ldata: Value = try_with!(
+        serde_json::from_reader(&mut lreader),
+        format!("Error parsing {}", left.to_string_lossy())
+    );
 
-    lreader.seek(SeekFrom::Start(0)).expect("could not seek");
+    let pset: PatchSet = try_with!(
+        serde_json::from_reader(&mut preader),
+        format!("Error parsing {}", patches.to_string_lossy())
+    );
 
     // when patching a patched file you must keep track of what its hash "should" be
     let hash_left = match hash_left_imputed {
