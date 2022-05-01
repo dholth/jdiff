@@ -24,7 +24,7 @@ use serde_json::Value;
 struct Patch {
     to: String,
     from: String,
-    patch: Option<json_patch::Patch>,
+    patch: json_patch::Patch, // [] is a valid, empty patch
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -65,7 +65,6 @@ pub fn patchy(
 
     let mut preader = BufReader::new(f_patches);
 
-    // TODO show filename on error
     let ldata: Value = try_with!(
         serde_json::from_reader(&mut lreader),
         format!("Error parsing {}", left.to_string_lossy())
@@ -97,7 +96,7 @@ pub fn patchy(
             Patch {
                 from: hash_left,
                 to: hash_right,
-                patch: Some(patch),
+                patch: patch
             },
         );
         pset.latest = pset.patches[0].to.clone();
@@ -194,11 +193,7 @@ pub fn apply(
     // apply in reverse order
     for p in to_apply.iter().rev() {
         eprintln!("apply {} -> {}", &p.from, &p.to);
-        let q = match p.patch {
-            Some(ref q) => q,
-            None => continue,
-        };
-        patch(&mut ldata, &q)?;
+        patch(&mut ldata, &p.patch)?;
     }
 
     if overwrite {
