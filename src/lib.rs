@@ -38,10 +38,10 @@ struct PatchSet {
 pub fn hash(path: &Path) -> Result<String, Box<dyn Error>> {
     use blake2::{digest::consts, Blake2b, Digest};
 
-    let (mut file, _format) = niffler::from_path(path)?;
+    let (file, _format) = niffler::from_path(path)?;
     // U constants are numbers of bytes
     let mut hasher = Blake2b::<consts::U32>::new();
-    io::copy(&mut file, &mut hasher)?;
+    io::copy(&mut BufReader::new(file), &mut hasher)?;
     let hash = hasher.finalize();
 
     Ok(format!("{:x}", hash))
@@ -60,17 +60,18 @@ pub fn patchy(
     let f_patches = File::open(patches)?;
 
     // transparently support compressed json
-    let (mut lreader, _lformat) = niffler::from_path(left)?;
-    let (mut rreader, _rformat) = niffler::from_path(right)?;
+    // TODO this is very slow
+    let (lreader, _lformat) = niffler::from_path(left)?;
+    let (rreader, _rformat) = niffler::from_path(right)?;
 
     let mut preader = BufReader::new(f_patches);
 
     let ldata: Value = try_with!(
-        serde_json::from_reader(&mut lreader),
+        serde_json::from_reader(&mut BufReader::new(lreader)),
         format!("Error parsing {}", left.to_string_lossy())
     );
     let rdata: Value = try_with!(
-        serde_json::from_reader(&mut rreader),
+        serde_json::from_reader(&mut BufReader::new(rreader)),
         format!("Error parsing {}", right.to_string_lossy())
     );
     let mut pset: PatchSet = try_with!(
@@ -134,13 +135,13 @@ pub fn apply(
     let f_patches = File::open(patches)?;
 
     // transparently support compressed json
-    let (mut lreader, _lformat) = niffler::from_path(left)?;
+    let (lreader, _lformat) = niffler::from_path(left)?;
 
     let mut preader = BufReader::new(f_patches);
 
     // TODO show filename on error
     let mut ldata: Value = try_with!(
-        serde_json::from_reader(&mut lreader),
+        serde_json::from_reader(&mut BufReader::new(lreader)),
         format!("Error parsing {}", left.to_string_lossy())
     );
 
